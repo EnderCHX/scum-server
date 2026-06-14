@@ -7,7 +7,7 @@ RUN set -eux; \
     echo 'Server = https://mirrors.tuna.tsinghua.edu.cn/archlinux/$repo/os/$arch' > /etc/pacman.d/mirrorlist; \
     echo -e '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist' >> /etc/pacman.conf; \
     pacman -Syu --noconfirm; \
-    pacman -S --noconfirm base-devel git sudo wine lib32-glibc; \
+    pacman -S --noconfirm base-devel git sudo wine lib32-glibc xorg-server-xvfb lib32-libpulse; \
     yes | pacman -Scc; \
     sysctl -w net.ipv6.conf.all.disable_ipv6=1 >/dev/null 2>&1 || true
 
@@ -68,12 +68,13 @@ RUN mkdir -p /scum_server; \
     echo '    cp "$RCON_SRC/dwmapi.dll" "$WIN64_DIR/"' >> /entrypoint.sh; \
     echo '    RCON_INI="$WIN64_DIR/ue4ss/Mods/scum_rcon/config.ini"' >> /entrypoint.sh; \
     echo '    # 注入 RCON 配置 (环境变量覆盖 config.ini)' >> /entrypoint.sh; \
-    echo '    RCON_BIND="${RCON_BIND_ADDRESS:-127.0.0.1}"' >> /entrypoint.sh; \
-    echo '    RCON_PORT_NUM="${RCON_PORT:-28015}"' >> /entrypoint.sh; \
     echo '    RCON_PASS="${RCON_PASSWORD:-CHANGE_ME_BEFORE_USE}"' >> /entrypoint.sh; \
-    echo '    sed -i "s/^bind_address = .*/bind_address = $RCON_BIND/" "$RCON_INI"' >> /entrypoint.sh; \
-    echo '    sed -i "s/^port = .*/port = $RCON_PORT_NUM/" "$RCON_INI"' >> /entrypoint.sh; \
-    echo '    sed -i "s/^password = .*/password = $RCON_PASS/" "$RCON_INI"' >> /entrypoint.sh; \
+    echo '    RCON_BIND="${RCON_BIND_ADDRESS:-0.0.0.0}"' >> /entrypoint.sh; \
+    echo '    RCON_PORT_NUM="${RCON_PORT:-28015}"' >> /entrypoint.sh; \
+    echo '    # 使用 | 分隔符避免密码中特殊字符 (/ \&) 破坏 sed' >> /entrypoint.sh; \
+    echo '    sed -i "s|^password = .*|password = $RCON_PASS|" "$RCON_INI"' >> /entrypoint.sh; \
+    echo '    sed -i "s|^bind_address = .*|bind_address = $RCON_BIND|" "$RCON_INI"' >> /entrypoint.sh; \
+    echo '    sed -i "s|^port = .*|port = $RCON_PORT_NUM|" "$RCON_INI"' >> /entrypoint.sh; \
     echo '    if [ "$RCON_PASS" = "CHANGE_ME_BEFORE_USE" ]; then' >> /entrypoint.sh; \
     echo '        echo "WARNING: RCON 密码仍为默认值，监听器将拒绝启动！"' >> /entrypoint.sh; \
     echo '        echo "        请设置环境变量 RCON_PASSWORD"' >> /entrypoint.sh; \
@@ -84,13 +85,29 @@ RUN mkdir -p /scum_server; \
     echo '    echo "WARNING: scum-rcon 插件未找到，跳过"' >> /entrypoint.sh; \
     echo 'fi' >> /entrypoint.sh; \
     echo '' >> /entrypoint.sh; \
-    echo 'exec wine "$SERVER_EXE" -log -port=$GAME_PORT -MaxPlayers=$MAX_PLAYERS $EXTRA_ARGS' >> /entrypoint.sh; \
+    echo '# Wine DLL 覆盖：dwmapi 代理注入 + 音频静默避免线程崩溃' >> /entrypoint.sh; \
+    echo 'export WINEDLLOVERRIDES="dwmapi=n,b;mmdevapi=b;dsound=b;xaudio2_7=b"' >> /entrypoint.sh; \
+    echo '# 启动虚拟 X 服务器 (SCUM 服务端需要一个显示设备)' >> /entrypoint.sh; \
+    echo 'Xvfb :99 -screen 0 1024x768x24 &' >> /entrypoint.sh; \
+    echo 'XVFB_PID=$!' >> /entrypoint.sh; \
+    echo 'export DISPLAY=:99' >> /entrypoint.sh; \
+    echo 'sleep 1  # 等待 Xvfb 就绪' >> /entrypoint.sh; \
+    echo '' >> /entrypoint.sh; \
+    echo 'wine "$SERVER_EXE" -log -port=$GAME_PORT -MaxPlayers=$MAX_PLAYERS $EXTRA_ARGS &' >> /entrypoint.sh; \
+    echo 'WINE_PID=$!' >> /entrypoint.sh; \
+    echo '' >> /entrypoint.sh; \
+    echo '# 等待任一进程退出，然后清理' >> /entrypoint.sh; \
+    echo 'wait -n $WINE_PID $XVFB_PID' >> /entrypoint.sh; \
+    echo 'EXIT_CODE=$?' >> /entrypoint.sh; \
+    echo 'kill $WINE_PID $XVFB_PID 2>/dev/null' >> /entrypoint.sh; \
+    echo 'wait 2>/dev/null' >> /entrypoint.sh; \
+    echo 'exit $EXIT_CODE' >> /entrypoint.sh; \
     chmod +x /entrypoint.sh
 
 COPY scum-rcon/ /opt/scum-rcon/
 
 VOLUME ["/scum_server"]
-EXPOSE 7777/udp 7777/tcp 7778/udp 7778/tcp 7779/udp 7779/tcp 28015/tcp
+EXPOSE 7777/udp 7777/tcp 7778/udp 7778/tcp 7779/udp 7779/tcp
 
 
 
