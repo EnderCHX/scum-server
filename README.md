@@ -48,21 +48,25 @@ docker run -it --rm \
 
 ## 端口说明
 
-| 端口 | 协议      | 用途                                      |
-| ---- | --------- | ----------------------------------------- |
-| 7777 | UDP + TCP | 游戏端口（TCP 可选用于 RCON）             |
-| 7778 | UDP       | Raw UDP 端口（游戏端口 +1）               |
-| 7779 | UDP       | Query 端口（游戏端口 +2，Steam 浏览器用） |
+| 端口  | 协议      | 用途                                      |
+| ----- | --------- | ----------------------------------------- |
+| 7777  | UDP + TCP | 游戏端口（TCP 可选用于 RCON）             |
+| 7778  | UDP       | Raw UDP 端口（游戏端口 +1）               |
+| 7779  | UDP + TCP | Query 端口（游戏端口 +2，Steam 浏览器用） |
+| 28015 | TCP       | RCON 端口（scum-rcon 插件）               |
 
 > **注意：** Query 端口不可使用 27020-27050（Steam 预留）。多实例依次递增端口如 `7780/7781/7782`。
 
 ## 环境变量
 
-| 变量          | 说明                                           | 默认值     |
-| ------------- | ---------------------------------------------- | ---------- |
-| `GAME_PORT`   | 游戏端口（Query = 此值 +2，Raw UDP = 此值 +1） | `7777`     |
-| `MAX_PLAYERS` | 最大玩家数                                     | `64`       |
-| `nobattleye`  | 设为任意非空值禁用 BattlEye                    | 空（启用） |
+| 变量                | 说明                                           | 默认值                 |
+| ------------------- | ---------------------------------------------- | ---------------------- |
+| `GAME_PORT`         | 游戏端口（Query = 此值 +2，Raw UDP = 此值 +1） | `7777`                 |
+| `MAX_PLAYERS`       | 最大玩家数                                     | `64`                   |
+| `nobattleye`        | 设为任意非空值禁用 BattlEye                    | 空（启用）             |
+| `RCON_BIND_ADDRESS` | RCON 监听地址                                  | `127.0.0.1`            |
+| `RCON_PORT`         | RCON 监听端口                                  | `28015`                |
+| `RCON_PASSWORD`     | RCON 密码（必须修改，否则监听器拒绝启动）      | `CHANGE_ME_BEFORE_USE` |
 
 ## 配置文件
 
@@ -110,6 +114,48 @@ volumes:
 ```bash
 docker compose up -d
 ```
+
+## RCON 管理（scum-rcon 插件）
+
+镜像内置 [scum-rcon](https://github.com/vasudh1/scum-rcon) 插件，基于 UE4SS + Source RCON 协议。支持标准 RCON 客户端（mcrcon、rcon-cli、BattleMetrics 等），可在远端执行大部分 SCUM 管理命令。
+
+### 前置条件
+
+- **必须禁用 BattlEye**：启动时添加 `-e nobattleye=1`
+- **必须修改默认密码**：设置 `-e RCON_PASSWORD=你的强密码`
+
+> ⚠️ 仅用于私有/白名单服务器，**不要**在 BattlEye 保护下的公开服务器使用。
+
+### 运行示例
+
+```bash
+docker run -d \
+  --name scum-server \
+  -v scum-data:/scum_server \
+  -p 7777:7777/udp -p 7777:7777/tcp \
+  -p 7778:7778/udp -p 7779:7779/udp \
+  -p 28015:28015/tcp \
+  -e nobattleye=1 \
+  -e RCON_BIND_ADDRESS=0.0.0.0 \
+  -e RCON_PORT=28015 \
+  -e RCON_PASSWORD=your-strong-password \
+  scum-server
+```
+
+### 连接测试
+
+使用 [mcrcon](https://github.com/Tiiffi/mcrcon) 测试：
+
+```bash
+mcrcon -H <服务器IP> -P 28015 -p your-strong-password "$broadcast Hello from RCON"
+```
+
+### RCON 命令要点
+
+- 直接发送命令动词，**不需要**加 `#`（如 `SpawnItem ...` 而非 `#SpawnItem ...`）
+- 含空格的参数用双引号包裹：`Teleport 1000 2000 300 "Player Name"`
+- 目标玩家使用 17 位 SteamID64
+- 大部分 SCUM 的 230+ 管理命令可直接使用
 
 ## 服务器管理
 

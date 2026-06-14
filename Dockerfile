@@ -58,11 +58,41 @@ RUN mkdir -p /scum_server; \
     echo 'echo "Max Players: $MAX_PLAYERS"' >> /entrypoint.sh; \
     echo '[ -n "$nobattleye" ] && echo "BattlEye:    DISABLED"' >> /entrypoint.sh; \
     echo 'echo "===================="' >> /entrypoint.sh; \
+    echo '' >> /entrypoint.sh; \
+    echo '# 复制 scum-rcon 插件到 Win64 目录' >> /entrypoint.sh; \
+    echo 'RCON_SRC="/opt/scum-rcon"' >> /entrypoint.sh; \
+    echo 'WIN64_DIR="/scum_server/SCUM/Binaries/Win64"' >> /entrypoint.sh; \
+    echo 'if [ -d "$RCON_SRC/ue4ss" ]; then' >> /entrypoint.sh; \
+    echo '    echo "安装 scum-rcon 插件..."' >> /entrypoint.sh; \
+    echo '    cp -r "$RCON_SRC/ue4ss" "$WIN64_DIR/"' >> /entrypoint.sh; \
+    echo '    cp "$RCON_SRC/dwmapi.dll" "$WIN64_DIR/"' >> /entrypoint.sh; \
+    echo '    RCON_INI="$WIN64_DIR/ue4ss/Mods/scum_rcon/config.ini"' >> /entrypoint.sh; \
+    echo '    # 注入 RCON 配置 (环境变量覆盖 config.ini)' >> /entrypoint.sh; \
+    echo '    RCON_BIND="${RCON_BIND_ADDRESS:-127.0.0.1}"' >> /entrypoint.sh; \
+    echo '    RCON_PORT_NUM="${RCON_PORT:-28015}"' >> /entrypoint.sh; \
+    echo '    RCON_PASS="${RCON_PASSWORD:-CHANGE_ME_BEFORE_USE}"' >> /entrypoint.sh; \
+    echo '    sed -i "s/^bind_address = .*/bind_address = $RCON_BIND/" "$RCON_INI"' >> /entrypoint.sh; \
+    echo '    sed -i "s/^port = .*/port = $RCON_PORT_NUM/" "$RCON_INI"' >> /entrypoint.sh; \
+    echo '    sed -i "s/^password = .*/password = $RCON_PASS/" "$RCON_INI"' >> /entrypoint.sh; \
+    echo '    if [ "$RCON_PASS" = "CHANGE_ME_BEFORE_USE" ]; then' >> /entrypoint.sh; \
+    echo '        echo "WARNING: RCON 密码仍为默认值，监听器将拒绝启动！"' >> /entrypoint.sh; \
+    echo '        echo "        请设置环境变量 RCON_PASSWORD"' >> /entrypoint.sh; \
+    echo '    fi' >> /entrypoint.sh; \
+    echo '    echo "RCON 监听: $RCON_BIND:$RCON_PORT_NUM"' >> /entrypoint.sh; \
+    echo '    echo "scum-rcon 插件安装完成"' >> /entrypoint.sh; \
+    echo 'else' >> /entrypoint.sh; \
+    echo '    echo "WARNING: scum-rcon 插件未找到，跳过"' >> /entrypoint.sh; \
+    echo 'fi' >> /entrypoint.sh; \
+    echo '' >> /entrypoint.sh; \
     echo 'exec wine "$SERVER_EXE" -log -port=$GAME_PORT -MaxPlayers=$MAX_PLAYERS $EXTRA_ARGS' >> /entrypoint.sh; \
     chmod +x /entrypoint.sh
 
-VOLUME ["/scum_server/SCUM/Saved"]
-EXPOSE 7777/udp 7777/tcp 7778/udp 7779/udp
+COPY scum-rcon/ /opt/scum-rcon/
+
+VOLUME ["/scum_server"]
+EXPOSE 7777/udp 7777/tcp 7778/udp 7778/tcp 7779/udp 7779/tcp 28015/tcp
+
+
 
 WORKDIR /scum_server
 ENTRYPOINT ["/entrypoint.sh"]
