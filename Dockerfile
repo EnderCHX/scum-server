@@ -45,15 +45,20 @@ RUN mkdir -p /scum_server; \
     echo '    done' >> /entrypoint.sh; \
     echo 'fi' >> /entrypoint.sh; \
     echo '' >> /entrypoint.sh; \
+    echo 'GAME_PORT="${GAME_PORT:-7777}"' >> /entrypoint.sh; \
+    echo 'MAX_PLAYERS="${MAX_PLAYERS:-64}"' >> /entrypoint.sh; \
+    echo 'QUERY_PORT=$((GAME_PORT + 2))' >> /entrypoint.sh; \
+    echo 'RAW_PORT=$((GAME_PORT + 1))' >> /entrypoint.sh; \
     echo 'EXTRA_ARGS=""' >> /entrypoint.sh; \
     echo 'if [ -n "$nobattleye" ]; then EXTRA_ARGS="$EXTRA_ARGS -nobattleye"; fi' >> /entrypoint.sh; \
     echo 'echo "=== SCUM Server ==="' >> /entrypoint.sh; \
-    echo 'echo "Game Port:   7777 (UDP+TCP)"' >> /entrypoint.sh; \
-    echo 'echo "Steam Port:  7778 (UDP)"' >> /entrypoint.sh; \
-    echo 'echo "Query Port:  7779 (UDP)"' >> /entrypoint.sh; \
+    echo 'echo "Game Port:   $GAME_PORT (UDP+TCP)"' >> /entrypoint.sh; \
+    echo 'echo "Raw UDP:     $RAW_PORT (UDP)"' >> /entrypoint.sh; \
+    echo 'echo "Query Port:  $QUERY_PORT (UDP)"' >> /entrypoint.sh; \
+    echo 'echo "Max Players: $MAX_PLAYERS"' >> /entrypoint.sh; \
     echo '[ -n "$nobattleye" ] && echo "BattlEye:    DISABLED"' >> /entrypoint.sh; \
     echo 'echo "===================="' >> /entrypoint.sh; \
-    echo 'exec wine "$SERVER_EXE" -log -port=7777 $EXTRA_ARGS' >> /entrypoint.sh; \
+    echo 'exec wine "$SERVER_EXE" -log -port=$GAME_PORT -MaxPlayers=$MAX_PLAYERS $EXTRA_ARGS' >> /entrypoint.sh; \
     chmod +x /entrypoint.sh
 
 VOLUME ["/scum_server/SCUM/Saved"]
